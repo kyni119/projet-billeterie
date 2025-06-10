@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  # Service base de données MySQL
+  mysql:
+    image: mysql:8.0                    # Utilise l'image officielle MySQL version 8
+    restart: always                     # Redémarre automatiquement en cas de crash
+    environment:
+      MYSQL_ROOT_PASSWORD: Franck123#   # Mot de passe root de la BDD
+      MYSQL_DATABASE: billeterie_db     # Nom de la base de données initiale
+    ports:
+      - "3306:3306"                      # Mappe le port MySQL local vers celui du conteneur
+    volumes:
+      - mysql-data:/var/lib/mysql       # Persistance des données MySQL
+      - ./billeterie-backend/sql/billeterie_db.sql:/docker-entrypoint-initdb.d/billeterie_db.sql
+                                        # Initialise la base avec un script SQL au démarrage
+
+  # Interface graphique pour gérer la base de données
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin        # Image officielle phpMyAdmin
+    restart: always
+    ports:
+      - "8080:80"                        # Accès via http://localhost:8080
+    environment:
+      PMA_HOST: mysql                   # Cible le service MySQL défini ci-dessus
+      MYSQL_ROOT_PASSWORD: Franck123#
+    depends_on:
+      - mysql                           # phpMyAdmin attend que MySQL soit opérationnel
+
+  # API Backend Node.js
+  backend:
+    build:
+      context: ./billeterie-backend     # Chemin vers le backend
+      dockerfile: Dockerfile            # Fichier Docker à utiliser
+    depends_on:
+      - mysql                           # Attends que MySQL soit prêt
+    command: bash -c 'while !</dev/tcp/mysql/3306; do echo "En attente de MySQL..."; sleep 2; done; node src/server.js'
+                                      
+    environment:
+      DB_HOST: mysql                    # Hôte BDD (le nom du service Docker)
+      DB_USER: root
+      DB_PASSWORD: Franck123#
+      DB_NAME: billeterie_db
+      FRONTEND_URL: http://localhost:5173  # Adresse du frontend pour les CORS
+    ports:
+      - "5000:5000"                     # API accessible sur http://localhost:5000
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./billet-frontend        # Chemin vers le dossier React
+      dockerfile: Dockerfile            # Fichier Docker à utiliser (celui que tu m’as donné)
+    ports:
+      - "5173:80"                       # L'app React sera disponible sur http://localhost:5173
+    environment:
+      - VITE_API_URL=http://localhost:5000  # Variable d’environnement utilisée dans Vite (React)
+
+# Définition d’un volume nommé pour la persistance des données MySQL
+volumes:
+  mysql-data:
+
+# Réseau par défaut nommé pour permettre aux services de communiquer entre eux
+networks:
+  default:
+    name: app-network
