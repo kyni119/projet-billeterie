@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const Favorites = ({ userId }) => {
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  
   useEffect(() => {
     const fetchFavorites = async () => {
       try {
