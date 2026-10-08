@@ -1,4 +1,4 @@
-# 🎟️ Projet Billetterie – Ticky
+#  Projet Billetterie – Ticky
 
 Ce projet est une **plateforme test de billetterie en ligne**, permettant aux utilisateurs de créer un compte, de consulter et réserver des événements, et aux organisateurs de gérer leurs événements, billets, et réservations.
 
@@ -11,7 +11,7 @@ Le projet est divisé en trois parties :
 
 ---
 
-## 🚀 Fonctionnalités principales
+##  Fonctionnalités principales
 
 ### Pour les visiteurs :
 
@@ -32,7 +32,7 @@ Le projet est divisé en trois parties :
 
 ---
 
-## 🛠️ Technologies utilisées
+##  Technologies utilisées
 
 * **Frontend** : React 18 + Vite + Tailwind CSS
 * **Backend** : Node.js, Express.js
@@ -42,11 +42,11 @@ Le projet est divisé en trois parties :
 
 ---
 
-## 🐳 Dockerisation complète
+## Dockerisation complète
 
 Le projet est dockerisé avec un seul fichier `docker-compose.yml` à la racine.
 
-### 📁 Structure du projet
+### Structure du projet
 
 ```
 projet-billeterie/
@@ -61,7 +61,7 @@ projet-billeterie/
 └── README.md
 ```
 
-### 🧱 Services lancés via Docker :
+### Services lancés via Docker :
 
 * `mysql` – Base de données
 * `phpmyadmin` – Interface de gestion MySQL
@@ -70,7 +70,7 @@ projet-billeterie/
 
 ---
 
-## 🔐 Authentification
+##  Authentification
 
 * Utilisation de tokens JWT
 * Gestion des routes protégées pour les utilisateurs et les organisateurs
@@ -78,13 +78,13 @@ projet-billeterie/
 
 ---
 
-## 🧪 Développement & Démarches
+##  Développement & Démarches
 
 * Méthodologie Agile avec sprints courts
 * Backend développé en priorité (2 semaines) : routes REST, tests Postman, gestion des erreurs, sécurité
 * Puis développement du frontend en composant les éléments de base (layouts, UI), pages publiques, puis pages privées et dashboard
 
-### 🛠️ Techniques utilisées :
+###  Techniques utilisées :
 
 * Lazy loading
 * Composants modulaires et réutilisables
@@ -97,7 +97,7 @@ projet-billeterie/
 
 ---
 
-## ✅ Lancement du projet avec Docker
+## Lancement du projet avec Docker
 
 1. **Cloner le projet depuis GitHub :**
 
@@ -117,9 +117,9 @@ docker-compose up --build
 
 4. **Accéder aux différentes interfaces :**
 
-   * 🖥️ Frontend (site de billetterie) : [http://localhost:5173](http://localhost:5173)
-   * 🛠️ Backend API : [http://localhost:5000](http://localhost:5000)
-   * 🗄️ phpMyAdmin : [http://localhost:8080](http://localhost:8080)
+   *  Frontend (site de billetterie) : [http://localhost:5173](http://localhost:5173)
+   *  Backend API : [http://localhost:5000](http://localhost:5000)
+   *  phpMyAdmin : [http://localhost:8080](http://localhost:8080)
 
      > Identifiants :
      >
