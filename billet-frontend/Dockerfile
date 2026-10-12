@@ -15,6 +15,9 @@ RUN npm ci
 # Variable d'API injectée à la compilation (Vite l'intègre au bundle)
 ARG VITE_API_URL=http://localhost:5000
 ENV VITE_API_URL=$VITE_API_URL
+# Clé d'obfuscation du brouillon d'événement en localStorage (visible côté client : n'est pas un secret)
+ARG VITE_KEY_API_CREATE=change-me
+ENV VITE_KEY_API_CREATE=$VITE_KEY_API_CREATE
 
 # Copie tout le reste du code source de l'application
 COPY . .

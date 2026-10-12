@@ -61,6 +61,7 @@ services:
       args:
         # Vite intègre cette valeur au build : elle doit être passée en build arg
         VITE_API_URL: ${VITE_API_URL:-http://localhost:5000}
+        VITE_KEY_API_CREATE: ${VITE_KEY_API_CREATE:-change-me}
     ports:
       - "5173:80"
 

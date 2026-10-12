@@ -15,7 +15,7 @@ const EventCard = ({ event }) => {
   } = event;
 
   const imageUrl = image_url 
-    ? `http://localhost:5000${image_url}`
+    ? `${import.meta.env.VITE_API_URL}${image_url}`
     : notfound;
 
   const minPrice = tickets?.length > 0
