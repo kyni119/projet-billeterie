@@ -3,24 +3,47 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
 const dayjs = require('dayjs');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const rateLimit = require('../middleware/rateLimit');
+const { requireAdmin, setAuthCookies, ROLE_ADMIN } = require('../middleware/auth');
 
 
-// Données de connexion admin (ultra basique, à sécuriser plus tard !)
-const ADMIN_CREDENTIALS = {
-  username: 'admin',
-  password: 'admin@123'
+// Connexion admin : identifiants lus dans l'environnement (mot de passe haché bcrypt).
+// Générer le hash : node -e "console.log(require('bcryptjs').hashSync('mot-de-passe', 10))"
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: 'Trop de tentatives. Réessayez dans 15 minutes.' });
+
+const safeEqual = (a, b) => {
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
 };
 
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
+router.post('/login', loginLimiter, async (req, res) => {
+  const { username, password } = req.body || {};
+  const expectedUser = process.env.ADMIN_USERNAME || 'admin';
+  const passwordHash = process.env.ADMIN_PASSWORD_HASH;
 
-  if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-    res.json({ success: true, message: "Connexion réussie" });
-  } else {
-    res.status(401).json({ success: false, message: "Identifiants invalides" });
+  if (!passwordHash) {
+    return res.status(503).json({ success: false, message: "Accès admin non configuré" });
   }
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ success: false, message: "Identifiants requis" });
+  }
+
+  // On évalue toujours les deux conditions (pas de fuite d'information par timing)
+  const userOk = safeEqual(username, expectedUser);
+  const passOk = await bcrypt.compare(password, passwordHash);
+  if (!userOk || !passOk) {
+    return res.status(401).json({ success: false, message: "Identifiants invalides" });
+  }
+
+  setAuthCookies(res, { id: 0, role: ROLE_ADMIN });
+  res.json({ success: true, message: "Connexion réussie" });
 });
 
+// Toutes les routes suivantes exigent un administrateur authentifié
+router.use(requireAdmin);
 
 // ✅ Fermer les événements terminés
 router.post('/close-past-events', (req, res) => {
@@ -75,7 +98,7 @@ router.post('/closeEventsIfNeeded', (req, res) => {
     const closedEvents = [];
   
     db.query(`SELECT * FROM events WHERE status = 0`, (err, events) => {
-      if (err) return res.status(500).json({ message: "Erreur serveur", error: err });
+      if (err) return res.status(500).json({ message: "Erreur serveur" });
   
       if (!events.length) return res.json({ message: "Aucun événement à traiter" });
   
@@ -185,7 +208,7 @@ router.get('/getRemainingTickets/:event_id', (req, res) => {
       WHERE event_id = ?
     `, [eventId], (err, results) => {
       if (err) {
-        return res.status(500).json({ message: "Erreur lors de la récupération des tickets", error: err });
+        return res.status(500).json({ message: "Erreur lors de la récupération des tickets" });
       }
   
       if (results.length === 0) {

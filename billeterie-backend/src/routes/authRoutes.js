@@ -1,101 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const cookieParser = require('cookie-parser');
 const nodemailer = require('nodemailer');
-const cors = require('cors');
-const helmet = require('helmet'); 
 const xss = require("xss");
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
-const resetBaseUrl = process.env.REACT_APP_BACK_END_URL
+const rateLimit = require('../middleware/rateLimit');
+const { setAuthCookies, clearAuthCookies, signAccessToken, verifyToken } = require('../middleware/auth');
 
+// Anti brute-force sur les routes sensibles
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' });
+const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, message: 'Trop de créations de compte. Réessayez plus tard.' });
+const resetLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: 'Trop de demandes. Réessayez dans 15 minutes.' });
 
-router.use(cookieParser());
-
-router.use(cors({
-    origin: process.env.FRONTEND_URL,  
-    methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization','X-CSRF-Token'],
-    credentials: true, 
-  }));
-router.use(helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      objectSrc: ["'none'"],
-      upgradeInsecureRequests: [],
-    },
-}));
-const authenticateToken = async (req, res, next) => {
-    const accessToken = req.cookies.access_token;
-    const refreshToken = req.cookies.refresh_token;
-  
-
-    if (!accessToken && !refreshToken) {
-      return res.status(401).json({ 
-        errorCode: 'AUTH_REQUIRED',
-        message: 'Authentification requise' 
-      });
-    }
-  
-  
-    if (accessToken) {
-      try {
-        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-        req.user = decoded;
-        return next();
-      } catch (e) {
-        if (e.name !== 'TokenExpiredError') {
-          return res.status(403).json({ 
-            errorCode: 'INVALID_TOKEN',
-            message: 'Token invalide' 
-          });
-        }
-        
-      }
-    }
-  
-
-    if (refreshToken) {
-      try {
-        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-        
- 
-        const newAccessToken = jwt.sign(
-          { id: decoded.id, role: decoded.role }, 
-          process.env.JWT_SECRET,
-          { expiresIn: '1h' }
-        );
-  
-
-        res.cookie('access_token', newAccessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 3600000 // 1h
-        });
-  
-        req.user = decoded;
-        return next();
-      } catch (e) {
-      
-        res.clearCookie('access_token');
-        res.clearCookie('refresh_token');
-        return res.status(401).json({ 
-          errorCode: 'SESSION_EXPIRED',
-          message: 'Session expirée' 
-        });
-      }
-    }
-  
-    // 4. Cas où seul l'access token est présent mais expiré
-    return res.status(401).json({ 
-      errorCode: 'TOKEN_EXPIRED',
-      message: 'Session expirée' 
-    });
-};
 
 function sendResetPasswordEmail(email, resetLink) {
   const transporter = nodemailer.createTransport({
@@ -302,144 +220,34 @@ function sendResetPasswordEmail(email, resetLink) {
   }
 }
 
-router.post('/update-password', [
-    authenticateToken,  // Vérifie si l'utilisateur est authentifié
-    body('currentPassword').notEmpty().withMessage('Le mot de passe actuel est requis.'),
-    body('newPassword')
-      .notEmpty().withMessage('Le nouveau mot de passe est requis.')
-      .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}$/)
-      .withMessage('Le nouveau mot de passe doit contenir une majuscule, une minuscule, un caractère spécial, et faire au moins 8 caractères.')
-  ], async (req, res) => {
-    const { currentPassword, newPassword } = req.body;
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: errors.array()[0].msg });
-    }
-  
-    try {
-      // Vérifier si l'utilisateur existe
-      db.query('SELECT * FROM users WHERE id = ?', [req.user.id], async (err, results) => {
-        if (err) return res.status(500).json({ message: 'Erreur serveur.' });
-  
-        if (results.length === 0) {
-          return res.status(404).json({ message: 'Utilisateur non trouvé.' });
-        }
-  
-        const user = results[0];
-  
-        // Vérifier le mot de passe actuel
-        const validPassword = await bcrypt.compare(currentPassword, user.password);
-        if (!validPassword) {
-          return res.status(400).json({ message: 'Le mot de passe actuel est incorrect.' });
-        }
-  
-        // Hasher le nouveau mot de passe
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-  
-        // Mettre à jour le mot de passe dans la base de données
-        db.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, req.user.id], (updateErr) => {
-          if (updateErr) return res.status(500).json({ message: 'Erreur lors de la mise à jour du mot de passe.' });
-  
-          return res.status(200).json({ message: 'Mot de passe mis à jour avec succès.' });
-        });
-      });
-    } catch (error) {
-      return res.status(500).json({ message: 'Erreur interne.' });
-    }
-  });
-router.get('/getProfile', authenticateToken, (req, res) => {
-    db.query('SELECT id, firstName, lastName, email, phoneNumber, profile, balance, totalSpent, numOrders FROM users WHERE id = ?', [req.user.id], (err, results) => {
-      if (err) return res.status(500).json({ message: 'Erreur serveur.' });
-  
-      if (results.length === 0) {
-        return res.status(404).json({ message: 'Utilisateur non trouvé.' });
-      } 
-      const user = results[0];
-      return res.status(200).json({
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        profile: user.profile,
-        balance: user.balance,
-        totalSpent: user.totalSpent,
-        numOrders: user.numOrders,
-      });
-    });
-});
-router.post('/update-profile', [
-    authenticateToken,  // Vérifie si l'utilisateur est authentifié
-    body('firstName').notEmpty().withMessage('Le prénom est requis.'),
-    body('lastName').notEmpty().withMessage('Le nom est requis.'),
-    body('email').isEmail().withMessage('Email invalide.'),
-    body('phoneNumber')
-      .notEmpty().withMessage('Le numéro de téléphone est requis.')
-      .isLength({ min: 5 }).withMessage('Le numéro de téléphone doit être valide.'),
-  ], (req, res) => {
-    const { firstName, lastName, email, phoneNumber} = req.body;
-    const errors = validationResult(req);
-  
-
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: errors.array()[0].msg });
-    }
-  
-    try {
- 
-      const sanitizedFirstName = xss(firstName);
-      const sanitizedLastName = xss(lastName);
-      const sanitizedEmail = xss(email);
-      const sanitizedPhoneNumber = xss(phoneNumber);
-  
-      db.query('SELECT * FROM users WHERE (email = ? OR phoneNumber = ?) AND id != ?', [sanitizedEmail, sanitizedPhoneNumber, req.user.id], (err, results) => {
-        if (err) return res.status(500).json({ message: 'Erreur serveur.' });
-  
-        if (results.length > 0) {
-          return res.status(400).json({ message: 'Email ou numéro de téléphone déjà utilisés.' });
-        }
-
-        db.query('UPDATE users SET firstName = ?, lastName = ?, email = ?, phoneNumber = ? WHERE id = ?', 
-          [sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhoneNumber, req.user.id], 
-          (updateErr) => {
-            if (updateErr) return res.status(500).json({ message: 'Erreur lors de la mise à jour du profil.' });
-  
-            return res.status(200).json({ message: 'Profil mis à jour avec succès.' });
-          });
-      });
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour du profil :', error);
-      return res.status(500).json({ message: 'Erreur interne.' });
-    }
-});
-router.post('/reset-password-request', (req, res) => {
+router.post('/reset-password-request', resetLimiter, (req, res) => {
   const { email } = req.body;
+  // Réponse identique que l'email existe ou non (pas d'énumération de comptes)
+  const genericResponse = { message: 'Si cet email est associé à un compte, vous recevrez un email pour réinitialiser votre mot de passe.' };
 
-  const query = 'SELECT * FROM users WHERE email = ?';
-  db.query(query, [email], (err, result) => {
+  if (typeof email !== 'string' || !email) {
+    return res.status(400).json({ message: 'Email requis.' });
+  }
+
+  db.query('SELECT email, password FROM users WHERE email = ?', [email], (err, result) => {
     if (err) {
-      console.log('Erreur lors de la vérification de l\'email:', err);
-      return res.status(500).json({ message: 'Erreur lors de la vérification de l\'email.' });
+      console.error('Erreur lors de la vérification de l\'email:', err.message);
+      return res.status(500).json({ message: 'Erreur serveur.' });
     }
+    if (result.length === 0) return res.status(200).json(genericResponse);
 
-    if (result.length === 0) {
-      return res.status(400).json({ message: 'Si cet email est associé à un compte, vous recevrez un email pour réinitialiser votre mot de passe.' });
-    }
-
-    const token = jwt.sign({ email: email }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    // Le token embarque une empreinte du mot de passe actuel : il devient invalide dès usage
+    const token = jwt.sign(
+      { email, type: 'reset', pwf: result[0].password.slice(-12) },
+      process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
     const resetLink = `${process.env.FRONTEND_URL}/reset-password/${token}`;
-
-    sendResetPasswordEmail(email, resetLink, (err) => {
-      if (err) {
-        console.log('Erreur lors de l\'envoi de l\'email:', err);
-        return res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'email de réinitialisation.' });
-      }
-
-      res.status(200).json({ message: 'Un email de réinitialisation a été envoyé.'});
-    });
+    sendResetPasswordEmail(email, resetLink);
+    res.status(200).json(genericResponse);
   });
 });
-router.post('/reset-password', 
+router.post('/reset-password', resetLimiter,
   body('newPassword')
     .notEmpty().withMessage('Le mot de passe est requis.')
     .isLength({ min: 8 }).withMessage('Le mot de passe doit contenir au moins 8 caractères.')
@@ -464,80 +272,53 @@ router.post('/reset-password',
     }
 
     jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) {
-        console.log('Token invalide ou expiré:', err);
+      if (err || decoded.type !== 'reset') {
         return res.status(400).json({ message: 'Token invalide ou expiré.' });
       }
 
-      const email = decoded.email;
-
-      bcrypt.hash(newPassword, 10, (err, hashedPassword) => {
-        if (err) {
-          console.log('Erreur lors du hashage du mot de passe:', err);
-          return res.status(500).json({ message: 'Erreur lors du hashage du mot de passe.' });
+      db.query('SELECT id, password FROM users WHERE email = ?', [decoded.email], (selErr, rows) => {
+        if (selErr) return res.status(500).json({ message: 'Erreur serveur.' });
+        // Le token ne fonctionne que tant que le mot de passe n'a pas changé
+        if (rows.length === 0 || rows[0].password.slice(-12) !== decoded.pwf) {
+          return res.status(400).json({ message: 'Token invalide ou expiré.' });
         }
 
-        const query = 'UPDATE users SET password = ? WHERE email = ?';
-        db.query(query, [hashedPassword, email], (err, result) => {
-          if (err) {
-            console.log('Erreur lors de la mise à jour du mot de passe:', err);
-            return res.status(500).json({ message: 'Erreur lors de la mise à jour du mot de passe.' });
-          }
+        bcrypt.hash(newPassword, 10, (hashErr, hashedPassword) => {
+          if (hashErr) return res.status(500).json({ message: 'Erreur serveur.' });
 
-          if (result.affectedRows === 0) {
-            return res.status(400).json({ message: 'Aucun utilisateur trouvé avec cet email.' });
-          }
-          res.status(200).json({ message: 'Le mot de passe a été réinitialisé avec succès.' });
+          db.query('UPDATE users SET password = ? WHERE id = ?', [hashedPassword, rows[0].id], (updErr) => {
+            if (updErr) return res.status(500).json({ message: 'Erreur lors de la mise à jour du mot de passe.' });
+            res.status(200).json({ message: 'Le mot de passe a été réinitialisé avec succès.' });
+          });
         });
       });
     });
   }
 );
-router.post('/refresh-token', async (req, res) => {
-    const refreshToken = req.cookies.refresh_token;
-    
-    if (!refreshToken) {
-      return res.status(401).json({ message: 'Token de rafraîchissement manquant' });
-    }
-  
-    try {
- 
-      const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-      
-   
-      const accessToken = jwt.sign({ id: decoded.id, role: decoded.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
-      
-
-      res.cookie('access_token', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict',
-        maxAge: 3600000 , 
-      });
-
-      return res.status(200).json({ message: 'Token rafraîchi avec succès', accessToken });
-  
-    } catch (err) {
-      return res.status(401).json({ message: 'Token de rafraîchissement invalide ou expiré' });
-    }
-});
-router.post('/logout', (req, res) => {
-
-    res.clearCookie('refresh_token', {
+router.post('/refresh-token', (req, res) => {
+  const refreshToken = req.cookies.refresh_token;
+  if (!refreshToken) {
+    return res.status(401).json({ message: 'Token de rafraîchissement manquant' });
+  }
+  try {
+    const decoded = verifyToken(refreshToken, 'refresh');
+    const accessToken = signAccessToken({ id: decoded.id, role: decoded.role });
+    res.cookie('access_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'Strict',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 1000,
     });
-  
-    res.clearCookie('access_token', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: 'Strict',
-    });
-  
-    return res.status(200).json({ message: "Déconnexion réussie." });
+    return res.status(200).json({ message: 'Token rafraîchi avec succès' });
+  } catch (err) {
+    return res.status(401).json({ message: 'Token de rafraîchissement invalide ou expiré' });
+  }
 });
-router.post('/register', [
+router.post('/logout', (req, res) => {
+  clearAuthCookies(res);
+  return res.status(200).json({ message: "Déconnexion réussie." });
+});
+router.post('/register', registerLimiter, [
    
     body('firstName').notEmpty().withMessage('Le prénom est requis.'),
     body('lastName').notEmpty().withMessage('Le nom est requis.'),
@@ -600,73 +381,48 @@ router.post('/register', [
       return res.status(500).json({ message: 'Erreur interne.' });
     }
 });
-router.post('/login', [
+router.post('/login', loginLimiter, [
     body('email').isEmail().withMessage('Email invalide.'),
     body('password').notEmpty().withMessage('Le mot de passe est requis.')
-], async (req, res) => {
-    const { email, password } = req.body;
-  
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ message: errors.array()[0].msg });
-    }
-  
-    try {
-      
-      db.query('SELECT * FROM users WHERE email = ?', [email], async (err, results) => {
-        if (err) return res.status(500).json({ message: 'Erreur serveur.' });
-  
-        if (results.length === 0) {
-          return res.status(400).json({ message: 'Aucun utilisateur trouvé avec cet email.' });
-        }
-  
-        const user = results[0];
-  
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ message: errors.array()[0].msg });
+  }
+  const { email, password } = req.body;
 
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-          return res.status(400).json({ message: 'Mot de passe incorrect.' });
-        }
-  
-        const accessToken = jwt.sign({ id: user.id, role: user.profile }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        const refreshToken = jwt.sign({ id: user.id, role: user.profile }, process.env.JWT_SECRET, { expiresIn: '7d' });
-  
-        
-        res.cookie('refresh_token', refreshToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'Strict',
-          maxAge: 7 * 24 * 60 * 60 * 1000 // 7 jours
-        });
-  
-        res.cookie('access_token', accessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'Strict',
-          maxAge: 60 * 60 * 1000 // 1 heure
-        });
-  
-        return res.status(200).json({
-          message: 'Connexion réussie',
-          accessToken,
-          refreshToken,
-          user: {
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            email: user.email,
-            phoneNumber: user.phoneNumber,
-            profile: user.profile,  
-            balance: user.balance,
-            totalSpent: user.totalSpent,
-            numOrders: user.numOrders,
-          },
-        });
-      });
-    } catch (error) {
-      console.error('Erreur lors de la connexion :', error);
+  db.query('SELECT * FROM users WHERE email = ?', [email], async (err, results) => {
+    if (err) return res.status(500).json({ message: 'Erreur serveur.' });
+
+    // Même message que l'email soit inconnu ou le mot de passe faux
+    const invalid = () => res.status(400).json({ message: 'Email ou mot de passe incorrect.' });
+    if (results.length === 0) return invalid();
+
+    const user = results[0];
+    try {
+      if (!(await bcrypt.compare(password, user.password))) return invalid();
+    } catch (e) {
       return res.status(500).json({ message: 'Erreur interne du serveur.' });
     }
+
+    // Les tokens ne transitent que par des cookies httpOnly (jamais dans le corps JSON)
+    setAuthCookies(res, { id: user.id, role: user.profile });
+
+    return res.status(200).json({
+      message: 'Connexion réussie',
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        profile: user.profile,
+        balance: user.balance,
+        totalSpent: user.totalSpent,
+        numOrders: user.numOrders,
+      },
+    });
+  });
 });
 
 module.exports = router;

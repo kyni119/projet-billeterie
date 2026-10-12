@@ -136,3 +136,20 @@ Projet personnel réalisé dans un cadre d'apprentissage. Toute contribution est
 
 ---
 
+
+---
+
+## Installation et configuration
+
+1. Copier `.env.example` en `.env` à la racine et renseigner les valeurs (mot de passe MySQL, `JWT_SECRET`, email, admin). **Ne jamais commiter ce fichier.**
+2. Générer le hash du mot de passe admin :
+   ```bash
+   node -e "console.log(require('bcryptjs').hashSync('mon-mot-de-passe', 10))"
+   ```
+   puis le placer dans `ADMIN_PASSWORD_HASH`.
+3. Lancer : `docker compose up --build` (ajouter `--profile dev` pour phpMyAdmin, accessible sur `127.0.0.1:8080`).
+4. Sans Docker : `cd billeterie-backend && cp .env.example .env && npm ci && npm start`.
+
+Tests backend : `cd billeterie-backend && npm test`.
+
+> ⚠️ Le paiement est **simulé** (`billeterie-backend/src/services/payment.js`). Il est désactivé en production tant qu'un vrai prestataire n'est pas branché (ou `ALLOW_SIMULATED_PAYMENTS=true`).

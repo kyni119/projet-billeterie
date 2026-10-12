@@ -1,20 +1,16 @@
-# Utilise une image Node.js officielle comme base (version 18 LTS)
-FROM node:18
+FROM node:20-slim
 
-# Définit le répertoire de travail à l’intérieur du conteneur
 WORKDIR /app
 
-# Copie les fichiers de dépendances package.json et package-lock.json
 COPY package*.json ./
+# Dépendances de production uniquement, installation reproductible
+RUN npm ci --omit=dev
 
-# Installe les dépendances du backend
-RUN npm install
-
-# Copie le reste des fichiers de l'application (routes, contrôleurs, etc.)
 COPY . .
 
-# Expose le port 5000 (le même que celui utilisé dans Express)
-EXPOSE 5000
+# Dossier des images uploadées, exécution sans droits root
+RUN mkdir -p public/uploads && chown -R node:node /app
+USER node
 
-# Démarre le serveur en lançant le fichier principal
+EXPOSE 5000
 CMD ["node", "src/server.js"]

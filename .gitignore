@@ -6,5 +6,10 @@
 # Build folders
 **/dist
 **/build
-# Env files
+# Env files (ne jamais commiter de secrets, utiliser .env.example)
+.env
 **/.env
+!.env.example
+!**/.env.example
+# Archives de billets générées
+**/tickets_archives

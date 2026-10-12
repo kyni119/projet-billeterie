@@ -1,63 +1,98 @@
-const express = require('express');
+const path = require('path');
 const dotenv = require('dotenv');
-const cors = require('cors');
-
-const authRoutes = require('../src/routes/authRoutes');
-const accountRoutes = require('../src/routes/accountRoutes');
-const payRoutes = require('../src/routes/payroute');
-const adminRoutes = require('../src/routes/adminRoute');
-const cookieParser = require('cookie-parser');
-
 dotenv.config();
 
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
+
+const authRoutes = require('./routes/authRoutes');
+const accountRoutes = require('./routes/accountRoutes');
+const payRoutes = require('./routes/payroute');
+const adminRoutes = require('./routes/adminRoute');
+
+// Le serveur ne doit pas démarrer sans secret JWT
+if (!process.env.JWT_SECRET) {
+  console.error('JWT_SECRET est requis. Voir .env.example');
+  process.exit(1);
+}
+
 const app = express();
+const isProd = process.env.NODE_ENV === 'production';
+const frontendOrigin = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
 
+// Derrière un reverse proxy (nginx, Render...), nécessaire pour avoir la vraie IP (rate limit)
+app.set('trust proxy', 1);
 
-app.use(cookieParser());
+app.use(helmet({
+  // Les images uploadées sont affichées par le frontend (autre origine)
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 app.use(cors({
-    origin: process.env.FRONTEND_URL, 
-    methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization','X-CSRF-Token'],
-    credentials: true, 
-  }));
+  origin: frontendOrigin || false,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
 
+app.use(cookieParser());
+app.use(express.json({ limit: '1mb' }));
 
-// Servir les fichiers statiques
-app.use('/public', express.static('public'));
-app.use('/uploads', express.static('public/uploads'));  
-app.use(express.json());
+// Protection CSRF : les requêtes qui modifient des données doivent venir de l'origine du frontend
+// (en complément de cookies sameSite=strict).
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.get('origin');
+  if (origin && frontendOrigin && origin !== frontendOrigin) {
+    return res.status(403).json({ message: 'Origine non autorisée' });
+  }
+  next();
+});
+
+// Fichiers statiques : uniquement les images uploadées (pas tout le dossier public)
+app.use('/uploads', express.static(path.join(__dirname, '..', 'public', 'uploads')));
+
+app.get('/', (req, res) => {
+  res.send('API Backend de la billeterie');
+});
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
 app.use('/auth', authRoutes);
 app.use('/account', accountRoutes);
 app.use('/pay', payRoutes);
 app.use('/admin', adminRoutes);
-app.use(cookieParser());
 
-app.get('/', (req, res) => {
-    res.send('API Backend de la billeterie');
-});
 app.use((req, res) => {
-    const errorResponse = {
-      timestamp: new Date().toISOString(),
-      status: 404,
-      error: "Not Found",
-      message: "La route demandée n'existe pas.",
-      path: req.originalUrl
-    };
-    res.status(404).json(errorResponse);
+  res.status(404).json({
+    timestamp: new Date().toISOString(),
+    status: 404,
+    error: 'Not Found',
+    message: "La route demandée n'existe pas.",
+    path: req.originalUrl,
+  });
 });
+
+// Gestionnaire d'erreurs : ne jamais exposer les détails internes en production
+// eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-    const errorResponse = {
-      timestamp: new Date().toISOString(),
-      status: 500,
-      error: "Internal Server Error",
-      message: err.message || "Quelque chose s'est mal passé.",
-      path: req.originalUrl
-    };
-    res.status(500).json(errorResponse);
+  const status = err.status || (err.name === 'MulterError' ? 400 : 500);
+  if (status >= 500) console.error(err);
+  res.status(status).json({
+    timestamp: new Date().toISOString(),
+    status,
+    error: status >= 500 ? 'Internal Server Error' : 'Bad Request',
+    message: status >= 500 && isProd ? "Quelque chose s'est mal passé." : err.message,
+    path: req.originalUrl,
+  });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Serveur démarré sur le port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Serveur démarré sur le port ${PORT}`);
+  });
+}
+
+module.exports = app;

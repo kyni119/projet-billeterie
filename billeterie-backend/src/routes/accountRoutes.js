@@ -1,97 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const cookieParser = require('cookie-parser');
-const helmet = require('helmet'); 
 const xss = require("xss");
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
-const fs = require('fs');
-const path = require('path'); 
 const upload = require('../config/multerConfig');
-router.use(cookieParser());
 const dayjs = require('dayjs');
-
-
-
-  
-router.use(helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      objectSrc: ["'none'"],
-      upgradeInsecureRequests: [],
-    },
-}));
-const authenticateToken = async (req, res, next) => {
-    const accessToken = req.cookies.access_token;
-    const refreshToken = req.cookies.refresh_token;
-  
-    // 1. Aucun token présent
-    if (!accessToken && !refreshToken) {
-      return res.status(401).json({ 
-        errorCode: 'AUTH_REQUIRED',
-        message: 'Authentification requise' 
-      });
-    }
-  
-    // 2. Vérification du access token
-    if (accessToken) {
-      try {
-        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-        req.user = decoded;
-        return next();
-      } catch (e) {
-        if (e.name !== 'TokenExpiredError') {
-          return res.status(403).json({ 
-            errorCode: 'INVALID_TOKEN',
-            message: 'Token invalide' 
-          });
-        }
-        // Si expiration, on continue pour tenter un rafraîchissement
-      }
-    }
-  
-    // 3. Tentative de rafraîchissement si refresh token disponible
-    if (refreshToken) {
-      try {
-        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
-        
-        // Générer nouveau access token
-        const newAccessToken = jwt.sign(
-          { id: decoded.id, role: decoded.role }, // Même payload que l'original
-          process.env.JWT_SECRET,
-          { expiresIn: '1h' }
-        );
-  
-        // Set le nouveau cookie
-        res.cookie('access_token', newAccessToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
-          maxAge: 3600000 // 1h
-        });
-  
-        req.user = decoded;
-        return next();
-      } catch (e) {
-        // Nettoyer les cookies invalides
-        res.clearCookie('access_token');
-        res.clearCookie('refresh_token');
-        return res.status(401).json({ 
-          errorCode: 'SESSION_EXPIRED',
-          message: 'Session expirée' 
-        });
-      }
-    }
-  
-    // 4. Cas où seul l'access token est présent mais expiré
-    return res.status(401).json({ 
-      errorCode: 'TOKEN_EXPIRED',
-      message: 'Session expirée' 
-    });
-};
+const fs = require('fs');
+const { authenticateToken, requireOrganizer, clearAuthCookies } = require('../middleware/auth');
 
 router.post('/update-password', [
     authenticateToken,  // Vérifie si l'utilisateur est authentifié
@@ -221,8 +137,7 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
         }
   
         // Supprimer les cookies
-        res.clearCookie('access_token');
-        res.clearCookie('refresh_token');
+        clearAuthCookies(res);
   
         return res.status(200).json({ message: 'Compte supprimé avec succès.' });
       });
@@ -231,7 +146,7 @@ router.post('/delete-account', authenticateToken, async (req, res) => {
       return res.status(500).json({ message: 'Erreur serveur.' });
     }
 });
-router.post('/create-event', authenticateToken, [
+router.post('/create-event', authenticateToken, requireOrganizer, [
   // Validation des champs nécessaires
   body('title').trim().notEmpty().withMessage('Le titre est requis'),
   body('description').optional().isString().isLength({ max: 65000 }).withMessage('La description ne doit pas dépasser 65 000 caractères'),
@@ -258,17 +173,17 @@ router.post('/create-event', authenticateToken, [
     return res.status(400).json({ errors: errors.array().map(e => e.msg) });
   }
 
-  // 2. Vérification du rôle
-  if (req.user.role !== 1) {
-    return res.status(403).json({ message: "Réservé aux organisateurs" });
+  const { is_recurring, dates, start_date, end_date } = req.body;
+
+  // Liste blanche : on n'insère jamais directement le corps de la requête (mass assignment)
+  const ALLOWED_FIELDS = [
+    'title', 'description', 'category_id', 'location_type', 'address', 'city', 'phone',
+    'website_url', 'facebook_url', 'whatsapp_url', 'instagram_url', 'twitter_url',
+  ];
+  const eventData = {};
+  for (const field of ALLOWED_FIELDS) {
+    if (req.body[field] !== undefined) eventData[field] = req.body[field];
   }
-
-  const { is_recurring, dates, start_date, end_date, ...eventData } = req.body;
-
-
-  const parseSQLDate = (isoDateStr) => {
-  return new Date(isoDateStr).toISOString().slice(0, 19).replace('T', ' ');
-};
 
 
   db.query(
@@ -276,8 +191,6 @@ router.post('/create-event', authenticateToken, [
     {
       ...eventData,
       is_recurring,
-      start_date: is_recurring ? null : parseSQLDate(start_date),
-      end_date: is_recurring ? null : parseSQLDate(end_date),
       start_date: is_recurring ? null : start_date,
       end_date: is_recurring ? null : end_date,
       organizer_id: req.user.id,
@@ -312,15 +225,10 @@ router.post('/create-event', authenticateToken, [
 
 
 // my event piur les organsiateurs 
-router.get('/my-events', authenticateToken, (req, res) => {
+router.get('/my-events', authenticateToken, requireOrganizer, (req, res) => {
   const organizerId = req.user.id;
 
-   // 2. Vérification du rôle
-  if (req.user.role !== 1) {
-    return res.status(403).json({ message: "Réservé aux organisateurs" });
-  }
-
-  const query = `
+   const query = `
     SELECT id, title, description, image_url , start_date, end_date, is_recurring, status, created_at
     FROM events
     WHERE organizer_id = ?
@@ -337,7 +245,7 @@ router.get('/my-events', authenticateToken, (req, res) => {
   });
 });
 
-router.post('/add-image/:eventId', authenticateToken, upload.single('image'), (req, res) => {
+router.post('/add-image/:eventId', authenticateToken, requireOrganizer, upload.single('image'), (req, res) => {
   const eventId = req.params.eventId;  // Récupérer l'ID de l'événement
   const imagePath = req.file ? '/uploads/' + req.file.filename : null;  // Chemin de l'image
 
@@ -347,8 +255,8 @@ router.post('/add-image/:eventId', authenticateToken, upload.single('image'), (r
 
   // Mettre à jour l'événement avec l'URL de l'image
   db.query(
-    'UPDATE events SET image_url = ? WHERE id = ?',
-    [imagePath, eventId],
+    'UPDATE events SET image_url = ? WHERE id = ? AND organizer_id = ?',
+    [imagePath, eventId, req.user.id],
     (err, result) => {
       if (err) {
         console.error('Erreur MySQL:', err);
@@ -356,25 +264,22 @@ router.post('/add-image/:eventId', authenticateToken, upload.single('image'), (r
       }
 
       if (result.affectedRows === 0) {
-        return res.status(404).json({ message: 'Événement non trouvé' });
+        // Événement inexistant ou appartenant à un autre organisateur
+        if (req.file) fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ message: 'Événement non trouvé ou non autorisé' });
       }
 
       res.status(200).json({ success: true, eventId: eventId, imageUrl: imagePath });
     }
   );
 });
-router.patch('/events/:id/updateStatus', authenticateToken, [
+router.patch('/events/:id/updateStatus', authenticateToken, requireOrganizer, [
   body('status').isIn([-2, -1, 0, 1]).withMessage('Statut invalide')
 ], (req, res) => {
   // 1. Validation
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array().map(e => e.msg) });
-  }
-
-  // 2. Vérification du rôle
-  if (req.user.role !== 1) {
-    return res.status(403).json({ message: "Réservé aux organisateurs" });
   }
 
   // 3. Mise à jour du statut
@@ -1145,11 +1050,8 @@ router.get('/getReservations/:id', authenticateToken, (req, res) => {
 });
 
 
-
 module.exports = router;
 
-
-module.exports = router;
 
 
 

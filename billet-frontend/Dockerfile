@@ -1,7 +1,7 @@
 # Étape 1 : Construction de l'application React avec Node.js
 
-# Utilise l’image légère node:18-alpine pour installer les dépendances et builder l'app
-FROM node:18-alpine AS builder
+# Utilise l’image légère node:20-alpine pour installer les dépendances et builder l'app
+FROM node:20-alpine AS builder
 
 # Définit le dossier de travail dans le conteneur
 WORKDIR /app
@@ -10,7 +10,11 @@ WORKDIR /app
 COPY package*.json ./
 
 # Installe les dépendances du projet (React, Vite, etc.)
-RUN npm install
+RUN npm ci
+
+# Variable d'API injectée à la compilation (Vite l'intègre au bundle)
+ARG VITE_API_URL=http://localhost:5000
+ENV VITE_API_URL=$VITE_API_URL
 
 # Copie tout le reste du code source de l'application
 COPY . .
