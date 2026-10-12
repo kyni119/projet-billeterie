@@ -8,7 +8,7 @@ const Register = () => {
     firstName: '', lastName: '', email: '',
     password: '', phoneNumber: '', profile: '0'
   });
-  const [error, setError] = useState('');
+  const [, setError] = useState('');
 const [loading, setLoading] = useState(false);
 const [showModal, setShowModal] = useState(false);
 const [modalMessage, setModalMessage] = useState('');
@@ -38,7 +38,6 @@ const [modalSuccess, setModalSuccess] = useState(false);
       setModalSuccess(false);
       setShowModal(true);
     } else {
-      login(data.user);
       setModalMessage("Inscription réussie !");
       setModalSuccess(true);
       setShowModal(true);
@@ -157,7 +156,7 @@ const [modalSuccess, setModalSuccess] = useState(false);
         </form>
       </div>
           {showModal && (
-  <div className="fixed inset-0 bg-transparent bg-opacity-50 z-50 flex items-center justify-center">
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
     <div className={`bg-white px-6 py-8 rounded-lg shadow-xl max-w-sm w-full text-center border-t-4 ${
       modalSuccess ? 'border-green-500' : 'border-red-500'
     }`}>

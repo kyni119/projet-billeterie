@@ -137,7 +137,7 @@ const [modalSuccess, setModalSuccess] = useState(false);
       </div>
 
       {showModal && (
-  <div className="fixed inset-0 bg-transparent bg-opacity-50 z-50 flex items-center justify-center">
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
     <div className={`bg-white px-6 py-8 rounded-lg shadow-xl max-w-sm w-full text-center border-t-4 ${
       modalSuccess ? 'border-green-500' : 'border-red-500'
     }`}>

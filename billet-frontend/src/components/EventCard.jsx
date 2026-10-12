@@ -1,4 +1,3 @@
-import React from 'react';
 import { Link } from 'react-router-dom';
 import { FaMapMarkerAlt, FaCalendarAlt, FaTicketAlt } from 'react-icons/fa';
 import notfound from '../assets/no-image.jpg'
@@ -39,49 +38,47 @@ const EventCard = ({ event }) => {
   };
 
   return (
-    <Link 
-      to={`/event/${event.id}`} 
-      className="block rounded-lg overflow-hidden shadow-md transition-all duration-300"
+    <Link
+      to={`/event/${event.id}`}
+      className="group relative block aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-2xl bg-gray-200 shadow-md ring-1 ring-black/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
     >
-      {/* Image container */}
-      <div className="relative w-full h-full"> 
-        <img
-          src={imageUrl}
-          alt={title}
-          className="w-full h-full object-cover"
-        />
-    
+      <img
+        src={imageUrl}
+        alt={title}
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+      />
 
-<div className="absolute bottom-0 left-0 w-full backdrop-blur-md bg-black/40 text-white px-5 py-3">
-  <h2 className="text-2xl md:text-[1.75rem] font-bold mb-2 font-gabarito leading-tight line-clamp-2">
-    {title}
-  </h2>
+      {/* Dégradé pour la lisibilité du texte */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
 
-  {/* Ligne infos */}
-  <div className="flex flex-wrap items-center justify-between text-sm font-inter gap-x-4 gap-y-1">
-    {/* Lieu */}
-    <div className="flex items-center">
-      <FaMapMarkerAlt className="mr-1.5 text-red-700 text-lg" />
-      {city || (location_type === 'online' ? 'En ligne' : 'Lieu non spécifié')}
-    </div>
+      {/* Badge prix */}
+      {minPrice !== null && minPrice > 0 && (
+        <span className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-ink shadow font-inter">
+          <FaTicketAlt className="text-accent" />
+          dès {minPrice.toLocaleString('fr-FR')} FCFA
+        </span>
+      )}
+      {minPrice === 0 && (
+        <span className="absolute right-3 top-3 rounded-full bg-green-500 px-3 py-1 text-sm font-semibold text-white shadow font-inter">
+          Gratuit
+        </span>
+      )}
 
-    {/* Date */}
-    <div className="flex items-center">
-      <FaCalendarAlt className="mr-1.5 text-blue-300 text-lg" />
-      {formatDate()}
-    </div>
-
-    {/* Prix */}
-    {minPrice && (
-      <div className="flex items-center font-medium">
-        <FaTicketAlt className="mr-1.5 text-green-400 text-lg" />
-        {minPrice.toLocaleString('fr-FR')} FCFA
-      </div>
-    )}
-  </div>
-</div>
-
-
+      <div className="absolute bottom-0 left-0 w-full p-5 text-white">
+        <h2 className="mb-3 line-clamp-2 font-gabarito text-2xl font-bold leading-tight">
+          {title}
+        </h2>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-inter text-sm text-white/90">
+          <span className="flex items-center">
+            <FaMapMarkerAlt className="mr-1.5 text-accent" />
+            {city || (location_type === 'online' ? 'En ligne' : 'Lieu non spécifié')}
+          </span>
+          <span className="flex items-center">
+            <FaCalendarAlt className="mr-1.5 text-sky-300" />
+            {formatDate()}
+          </span>
+        </div>
       </div>
     </Link>
   );

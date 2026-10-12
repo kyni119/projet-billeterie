@@ -34,7 +34,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState('profile'); 
       const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
+  const [, setIsMobile] = useState(false);
 
    // Vérifie la taille de l'écran au chargement et au redimensionnement
   useEffect(() => {
@@ -484,7 +484,7 @@ const Informations = () => {
   );
 };
 
-const Reservations = ({ userId }) => (
+const Reservations = () => (
   <div>
     <h1 className="text-2xl font-bold">Mes réservations</h1>
 

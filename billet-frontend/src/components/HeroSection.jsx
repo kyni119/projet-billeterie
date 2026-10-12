@@ -8,7 +8,7 @@ import image1 from '../assets/baniere.png';
 
 const HeroSection = () => {
 
-  const [fade, setFade] = useState(true);
+  const fade = true;
 
   const placeholders = [
     "Reservez vos tickets ici",
@@ -50,9 +50,12 @@ const HeroSection = () => {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleSearch}
-            className="w-full px-5 py-2 pr-12 text-1xl font-dmsans rounded-full shadow-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-black/30 transition-all duration-300 bg-white"
+            aria-label="Rechercher un événement"
+            className="w-full px-5 py-3 pr-12 text-base font-dmsans rounded-full shadow-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-accent transition-all duration-300 bg-white"
           />
-          <button 
+          <button
+            type="button"
+            aria-label="Rechercher"
             onClick={handleSearch}
             className="absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-full hover:bg-gray-100 transition-all duration-300 active:scale-95"
           >
@@ -64,11 +67,11 @@ const HeroSection = () => {
       
     <div className="flex-grow flex flex-col items-center  overflow-hidden justify-between relative max-h-[90vh]  ">
 
-        <div className="absolute z-10 text-center  px-40 py-10">
-          <h1 className="font-anton text-[5rem] sm:text-[5em] md:text-[6rem] lg:text-[7rem] text-black mb-4 leading-none">
+        <div className="absolute z-10 text-center px-4 sm:px-10 lg:px-40 py-10">
+          <h1 className="font-anton text-[2.75rem] sm:text-[4rem] md:text-[6rem] lg:text-[7rem] text-black mb-4 leading-none">
               Soyez dans la salle 
           </h1>
-          <h1 className="font-anton text-[5rem] sm:text-[5rem] md:text-[6rem] lg:text-[7rem] text-black leading-none ">
+          <h1 className="font-anton text-[2.75rem] sm:text-[4rem] md:text-[6rem] lg:text-[7rem] text-black leading-none ">
             Quand l'histoire s'écrira
           </h1>
         </div>

@@ -9,15 +9,15 @@ const Footer = () => {
 
         {/* Logo & text */}
         <div className="text-center md:text-left">
-          <h1 className="text-7xl font-londrina tracking-wide mb-2">Ticky</h1>
+          <h1 className="text-6xl sm:text-7xl font-londrina tracking-wide mb-2">Ticky</h1>
           <p className="text-sm text-gray-400">Simplifiez la gestion de vos événements.</p>
         </div>
 
         {/* Social links */}
         <div className="flex items-center space-x-5">
-          <FaInstagram className="text-white text-xl hover:text-gray-400 transition" />
-          <FaTwitter className="text-white text-xl hover:text-gray-400 transition" />
-          <FaFacebookF className="text-white text-xl hover:text-gray-400 transition" />
+          <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><FaInstagram className="text-white text-xl hover:text-accent transition" /></a>
+          <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" aria-label="Twitter"><FaTwitter className="text-white text-xl hover:text-accent transition" /></a>
+          <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><FaFacebookF className="text-white text-xl hover:text-accent transition" /></a>
         </div>
 
         {/* App buttons */}
@@ -35,7 +35,7 @@ const Footer = () => {
 
       {/* Bottom line */}
       <div className="mt-10 border-t border-gray-800 pt-6 text-center text-xs text-gray-500">
-        © Ticky 2025. Tous droits réservés.
+        © {new Date().getFullYear()} Ticky. Tous droits réservés.
       </div>
     </footer>
   );

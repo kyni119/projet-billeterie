@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import locale from 'antd/es/date-picker/locale/fr_FR';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
@@ -31,7 +31,6 @@ const SearchEvents = () => {
   const [dateRange, setDateRange] = useState(null);
 
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
 const [isLoading, setIsLoading] = useState(false);
 
